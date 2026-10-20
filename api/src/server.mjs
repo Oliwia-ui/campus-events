@@ -1,4 +1,8 @@
-import { app, Event, seedDemoData, sequelize } from './app.mjs';
+import { app } from './app.mjs';
+import { Event } from './models/index.mjs';
+import { sequelize } from './db/connection.mjs';
+import { seedDemoData } from './db/demoData.mjs';
+import { env } from './config/env.mjs';
 
 await sequelize.sync();
 
@@ -8,7 +12,7 @@ if ((await Event.count()) === 0) {
   console.log('Empty database – demo data added');
 }
 
-const port = process.env.PORT || 3000;
+const port = env.port;
 app.listen(port, () => {
   console.log(`Campus Events API running on http://localhost:${port}/api`);
 });
