@@ -108,3 +108,35 @@ views/        one component per page, registered in router.js
 components/   reusable pieces: EventCard, SeatMeter, RegistrationForm, ErrorMessage
 styles.css    design tokens at the top, change those first
 ```
+
+## Deploy the API to Render (Docker + Neon)
+
+This deployment exposes the API only. The Vue frontend still runs locally with Vite;
+`/` on the API returns a JSON 404. Use `/api/health` to check the deployment.
+
+1. Create a Neon PostgreSQL project. Copy its direct connection string from **Connect**,
+   including `sslmode=require`. This is a secret: do not commit it.
+2. In Render, create a **Web Service** from this GitHub repository, branch `main`.
+3. Set **Language: Docker**, leave **Root Directory** empty, and use `./Dockerfile`
+   as the Dockerfile path. Keep the default Docker command. No build/start fields
+   are needed because the Dockerfile supplies them.
+4. Select a region near your Neon database and the **Free** compute option.
+5. Add environment variables: `NODE_ENV=production` and `DATABASE_URL` with the
+   Neon connection string. Render provides `PORT`; the app binds to `0.0.0.0`.
+6. Set the health check path to `/api/health`, then deploy.
+7. Visit `https://YOUR-SERVICE.onrender.com/api/health` and `/api/events`.
+
+The app creates missing tables on startup with `sequelize.sync()` and adds demo
+records if no events exist. It does not move existing local SQLite records to Neon.
+SQLite remains the default for local development; tests always use SQLite.
+Production requires `DATABASE_URL` so data is not stored on Render's ephemeral disk.
+Future schema changes need explicit migrations; startup sync does not migrate
+existing table definitions.
+
+Local checks: `npm run check` and `npm run build`. To test the image with Docker:
+
+```bash
+docker build -t campus-events-api .
+# Export DATABASE_URL privately in your shell first.
+docker run --rm -p 3000:3000 -e DATABASE_URL campus-events-api
+```

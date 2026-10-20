@@ -17,7 +17,8 @@
     "test": "npm test --workspaces",
     "lint": "eslint .",
     "check": "npm run lint && npm test",
-    "build": "npm run build -w web"
+    "build": "npm run build -w web",
+    "start": "npm run start -w api"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",

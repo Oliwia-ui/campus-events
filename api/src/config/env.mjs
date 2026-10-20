@@ -6,9 +6,19 @@ if (process.env.NODE_ENV !== 'test') {
   }
 }
 
+const isTest = process.env.NODE_ENV === 'test';
+const isProduction = process.env.NODE_ENV === 'production';
+const databaseUrl = isTest ? undefined : process.env.DATABASE_URL;
+
+if (isProduction && !databaseUrl) {
+  throw new Error('DATABASE_URL is required in production');
+}
+
 export const env = {
   port: process.env.PORT || 3000,
   logLevel: process.env.LOG_LEVEL || 'info',
-  isTest: process.env.NODE_ENV === 'test',
+  isTest,
+  isProduction,
+  databaseUrl,
   dbStorage: process.env.DB_STORAGE || './data/events.sqlite'
 };

@@ -13,6 +13,6 @@ if ((await Event.count()) === 0) {
 }
 
 const port = env.port;
-app.listen(port, () => {
+app.listen(port, '0.0.0.0', () => {
   console.log(`Campus Events API running on http://localhost:${port}/api`);
 });
