@@ -8,7 +8,7 @@ A small but complete web app: students browse campus events and register for the
 - **web/** : frontend: Vue 3, Vue Router, Vite
 
 It works out of the box, and it has tests. It is also the kind of code you will meet in your first job:
-the whole API is one long file. Your job is to **clean it up, ship it to production, fix it and add the hard
+the API now separates HTTP handling, business rules and database queries. Your job is to **clean it up, ship it to production, fix it and add the hard
 parts**
 
 ## Quick start
@@ -55,24 +55,37 @@ so the browser only talks to one address and you don't need CORS.
 
 ### api/
 
-**Today** the whole API lives in one file:
+The API is split into layers. A request flows through **routes → controllers → services → repositories**.
 
 ```
-api/src/app.mjs      settings, database + models, validation, routes, business rules, error handling
-api/src/server.mjs   starts the app (and adds demo data to an empty database)
-api/src/seed.mjs     npm run seed: reset the database
+api/src/app.mjs       assembles Express and middleware
+api/src/server.mjs    starts the app and seeds an empty database
+api/src/seed.mjs      resets the database with demo data
+api/src/routes/       connects URLs, validation and controllers
+api/src/controllers/ translates HTTP requests and responses
+api/src/services/    business rules and application errors
+api/src/repositories/ database queries through Sequelize
+api/src/models/      Sequelize models and associations
+api/src/db/          database connection and demo data
+api/src/config/      environment settings and logging
+api/src/validation/  request schemas
+api/src/middleware/  validation, request logging and error responses
+api/src/errors/      shared AppError type
 ```
 
-Prefered:
+For example, registering for an event enters `routes/index.mjs`, passes validation,
+then calls `controllers/registrations.mjs` → `services/registrations.mjs` →
+`repositories/registrations.mjs`. The service checks the event and registration rules;
+the controller returns the HTTP response. Services do not import Express or Sequelize.
+Only `config/env.mjs` reads environment variables.
 
-```
-routes/        URL + validation → controller        (no logic)
-controllers/   HTTP in/out, picks the status code    (thin)
-services/      business rules, throws AppErrors      (no Express, no SQL)
-repositories/  data access via Sequelize             (no rules)
-models/ db/    tables, connection, demo data
-config/        the only place that reads process.env
-```
+Progress: configuration/database extraction and API layer separation are complete.
+`npm run check` passes all 20 API tests and 10 frontend tests. Existing integration
+tests are unchanged. Email delivery and caching are future steps.
+
+Known starter behaviour preserved for this refactor: the capacity check uses `>`
+instead of `>=`, so one extra registration is accepted. Correcting that boundary
+and handling concurrent registrations require a separate behaviour change with tests.
 
 The integration tests in `api/tests/integration` only talk HTTP. They pass before your refactoring,
 and they must still pass after it, without changing them.
