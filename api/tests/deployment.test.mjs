@@ -1,20 +1,34 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
-function runConfig(nodeEnv, databaseUrl, script) {
+function runConfig(nodeEnv, databaseUrl, script, overrides = {}) {
   return spawnSync(process.execPath, ['--input-type=module', '-e', script], {
     cwd: new URL('../', import.meta.url),
-    env: { ...process.env, NODE_ENV: nodeEnv, DATABASE_URL: databaseUrl },
+    env: { ...process.env, NODE_ENV: nodeEnv, DATABASE_URL: databaseUrl, ...overrides },
     encoding: 'utf8'
   });
 }
 
 describe('Deployment configuration', () => {
-  it('requires a database URL in production instead of ephemeral SQLite', () => {
-    const result = runConfig('production', '', 'await import("./src/config/env.mjs");');
-    assert.notEqual(result.status, 0);
-    assert.match(result.stderr, /DATABASE_URL is required in production/);
+  it('starts production with SQLite and creates its missing data directory', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'campus-sqlite-'));
+    try {
+      const result = runConfig('production', '', `
+        const { sequelize, Event, seedDemoData } = await import('./src/app.mjs');
+        await sequelize.sync();
+        await seedDemoData();
+        console.log(sequelize.getDialect(), await Event.count());
+        await sequelize.close();
+      `, { DB_STORAGE: join(directory, 'data/events.sqlite') });
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(result.stdout.trim(), 'sqlite 4');
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   it('selects PostgreSQL with a database URL without exposing credentials', () => {
