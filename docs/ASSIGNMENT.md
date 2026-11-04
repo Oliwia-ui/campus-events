@@ -63,13 +63,14 @@
   | Cache | Render Key Value (Redis), `REDIS_URL` | in-memory cache |
   | Database | `DATABASE_URL` (Neon) if set | SQLite, reset when Render restarts |
   | Queue | `AMQP_URL` (CloudAMQP) if set | the relay sends the mail itself |
-  | Mail | `SMTP_*` (Ethereal) if set | mail is built and logged, not sent |
+  | Mail | Mailtrap sandbox on port 2525, `SMTP_*` | mail is built and logged, not sent |
 
 * The free Render instance sleeps after 15 minutes; the first visit then takes about a minute.
 * Render's free plan blocks outgoing mail on ports 25, 465 and 587
   ([Render changelog](https://render.com/changelog/free-web-services-will-no-longer-allow-outbound-traffic-to-smtp-ports)).
   With Ethereal on port 587 the live log shows exactly the requirement: the registration is saved (201)
-  and the outbox keeps retrying. A provider on port 2525 (Mailtrap, Brevo) gets the mail through.
+  and the outbox keeps retrying. That is why the live site uses the Mailtrap sandbox on port 2525: registering sends a real test mail
+  that shows up in the Mailtrap inbox about a second later.
 
 ## Known limitations
 
