@@ -69,8 +69,12 @@ api/src/models/      Sequelize models and associations
 api/src/db/          database connection and demo data
 api/src/config/      environment settings and logging
 api/src/validation/  request schemas
-api/src/middleware/  validation, request logging and error responses
+api/src/middleware/  validation, JSON check, caching, frontend, logging and error responses
 api/src/errors/      shared AppError type
+api/src/cache/       Redis cache (or in-memory without REDIS_URL) and the cache keys
+api/src/mail/        nodemailer transport and the confirmation mail text
+api/src/messaging/   outbox relay, RabbitMQ connection and the mail consumer
+api/src/utils/       small helpers (serial queue)
 ```
 
 For example, registering for an event enters `routes/index.mjs`, passes validation,
@@ -79,13 +83,39 @@ then calls `controllers/registrations.mjs` → `services/registrations.mjs` →
 the controller returns the HTTP response. Services do not import Express or Sequelize.
 Only `config/env.mjs` reads environment variables.
 
-Progress: configuration/database extraction and API layer separation are complete.
-`npm run check` passes all 20 API tests and 10 frontend tests. Existing integration
-tests are unchanged. Email delivery and caching are future steps.
+`npm run check` passes 53 API tests and 10 frontend tests. The original integration
+tests are unchanged; new behaviour has its own test files.
 
-Known starter behaviour preserved for this refactor: the capacity check uses `>`
-instead of `>=`, so one extra registration is accepted. Correcting that boundary
-and handling concurrent registrations require a separate behaviour change with tests.
+#### Registrations and capacity
+
+A registration is checked and saved in one database transaction, one at a time per process
+(`utils/serialQueue.mjs`). On Postgres the event row is also locked (`SELECT … FOR UPDATE`),
+so even two API servers can't sell the same last seat. A full event answers `409 Event is full`.
+
+#### Confirmation mail (asynchronous, survives a broken mail server)
+
+```
+POST /registrations ──► one transaction: Registration + OutboxMessage ──► 201 (no mail server involved)
+                                                │
+          outbox relay (every few seconds) ◄────┘   marks the row processed only after success
+                 │
+     AMQP_URL set? ──yes──► RabbitMQ exchange "campus-events" ──► queue campus-events.mail ──► mail consumer ──► SMTP
+                 └─no───► sends the mail itself ───────────────────────────────────────────────────────────► SMTP
+```
+
+* The registration and the "send this mail" row are saved together or not at all.
+* Mail server or RabbitMQ down: the row stays pending (`attempts`, `lastError`) and is retried.
+* The consumer acks only after the mail is sent; on failure it waits 10 s and requeues.
+* Delivery is at-least-once: in a rare crash a mail can be sent twice, never lost.
+* Without `SMTP_HOST` the mail is built and logged, not sent (development).
+
+#### Caching
+
+The four GET endpoints (`/events`, `/events/:id`, `/events/:id/registrations`, `/stats`) are cached
+by `middleware/cached.mjs`, in Redis when `REDIS_URL` is set and in memory otherwise.
+The `X-Cache` response header shows `HIT` or `MISS`. After every write the service deletes
+exactly the keys that became outdated (`cache/index.mjs` → `cacheKeys`), so the next GET is fresh.
+Entries also expire after 60 s as a safety net. If Redis is down the API reads from the database.
 
 The integration tests in `api/tests/integration` only talk HTTP. They pass before your refactoring,
 and they must still pass after it, without changing them.
@@ -100,6 +130,15 @@ and they must still pass after it, without changing them.
 
 Errors always have this shape: `{ "error": { "code", "message", "details?" } }`.
 
+| Situation | Status | `error.code` |
+|---|---|---|
+| Unknown event id | 404 | `NOT_FOUND` |
+| Id that is not a positive whole number (`/events/abc`) | 400 | `VALIDATION_ERROR` |
+| Broken JSON body | 400 | `INVALID_JSON` |
+| Body without `Content-Type: application/json` | 415 | `UNSUPPORTED_MEDIA_TYPE` |
+| Same email twice, or event full | 409 | `CONFLICT` |
+| Unknown route under `/api` | 404 | `NOT_FOUND` |
+
 ### web/
 
 ```
@@ -109,29 +148,56 @@ components/   reusable pieces: EventCard, SeatMeter, RegistrationForm, ErrorMess
 styles.css    design tokens at the top, change those first
 ```
 
-## Deploy the API to Render (Docker + SQLite demo)
+## Deploy to Render (Docker: API + website on one URL)
 
-This deployment exposes the API only. The Vue frontend still runs locally with Vite;
-`/` on the API returns a JSON 404. Use `/api/health` to check the deployment.
+The Docker image builds the Vue app and Express serves it, so one Render URL is the whole site.
+Pages like `/events/1` work after a refresh; `/api/...` is the API.
 
-1. In Render, create a **Web Service** from this GitHub repository, branch `main`.
-2. Set **Language: Docker**, leave **Root Directory** empty, and use `./Dockerfile`
-   as the Dockerfile path. Keep the default Docker command.
-3. Select the **Free** compute option and set `NODE_ENV=production`.
-   No `DATABASE_URL` or external database is required. Remove `DATABASE_URL` if
-   you previously added a placeholder. Render provides `PORT` automatically.
-4. Set the health check path to `/api/health`, then deploy.
-5. Visit `https://YOUR-SERVICE.onrender.com/api/health` and `/api/events`.
+### 1. Create the services (free plans)
 
-The app creates the SQLite directory and missing tables on startup, then adds demo
-records if no events exist. Render's free filesystem is temporary: events and
-registrations are reset when the instance restarts, redeploys, or spins down.
-This setup is for the class demo. PostgreSQL via `DATABASE_URL` is still optional
-for a future persistent database; tests always use SQLite.
+| Service | Where | Copy this |
+|---|---|---|
+| Postgres | [neon.tech](https://neon.tech) → new project | connection string → `DATABASE_URL` |
+| RabbitMQ | [cloudamqp.com](https://www.cloudamqp.com) → free plan | AMQP URL (`amqps://…`) → `AMQP_URL` |
+| Redis | Render → New → **Key Value** (same region as the web service) | Internal URL (`redis://…`) → `REDIS_URL` |
+| Mail | [ethereal.email](https://ethereal.email) → Create Ethereal Account | host, user, password → `SMTP_*` |
+
+### 2. Create the web service
+
+1. Render → New → **Web Service** from this repository. **Language: Docker**, Dockerfile `./Dockerfile`, Free instance.
+2. Environment variables:
+
+```
+NODE_ENV=production
+DATABASE_URL=postgresql://...neon.tech/neondb?sslmode=require
+REDIS_URL=redis://red-...:6379
+AMQP_URL=amqps://...cloudamqp.com/...
+SMTP_HOST=smtp.ethereal.email
+SMTP_PORT=587
+SMTP_USER=...@ethereal.email
+SMTP_PASS=...
+MAIL_FROM=Campus Events <no-reply@campus-events.app>
+```
+
+3. Health check path `/api/health`, then deploy.
+
+Each of the four services is optional: without `DATABASE_URL` the app uses SQLite (reset on every
+restart on Render), without `REDIS_URL` it caches in memory, without `AMQP_URL` the relay sends the
+mail itself, without `SMTP_HOST` mails are only logged.
+
+### 3. Check it works
+
+* `https://YOUR-SERVICE.onrender.com/` shows the events.
+* Logs show `Redis connected`, `RabbitMQ connected` and `messaging started`.
+* Register for an event: the log shows `mail sent` with a `previewUrl`; open it to see the mail
+  (or log in on ethereal.email → Messages).
+* `curl -i https://YOUR-SERVICE.onrender.com/api/events` twice: the second has `X-Cache: HIT`.
+
+The free web service sleeps after 15 minutes without visitors; the first request then takes about a minute.
 
 Local checks: `npm run check`. To test the image with Docker:
 
 ```bash
-docker build -t campus-events-api .
-docker run --rm -p 3000:3000 campus-events-api
+docker build -t campus-events .
+docker run --rm -p 3000:3000 campus-events
 ```
