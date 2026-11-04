@@ -2,7 +2,7 @@ import * as events from '../repositories/events.mjs';
 import * as registrations from '../repositories/registrations.mjs';
 import { AppError } from '../errors/AppError.mjs';
 
-const missing = (id) => new AppError(404, 'NOT_FOUND', `Event with id ${id} not found`);
+export const missing = (id) => new AppError(404, 'NOT_FOUND', `Event with id ${id} not found`);
 
 export async function requireEvent(id) {
   const event = await events.findById(id);
