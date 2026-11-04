@@ -7,6 +7,7 @@ import { AppError } from '../errors/AppError.mjs';
 import { createSerialQueue } from '../utils/serialQueue.mjs';
 import { logger } from '../config/logger.mjs';
 import { REGISTRATION_CREATED } from '../messaging/messageTypes.mjs';
+import { cache, cacheKeys } from '../cache/index.mjs';
 
 // One registration at a time in this process (see utils/serialQueue.mjs).
 const oneAtATime = createSerialQueue();
@@ -16,8 +17,16 @@ export async function list(eventId) {
   return registrations.list(eventId);
 }
 
-export function create(eventId, data) {
-  return oneAtATime(() => inTransaction(async (transaction) => {
+export async function create(eventId, data) {
+  const registration = await oneAtATime(() => saveRegistration(eventId, data));
+  // Only after the commit: one more registration changes spotsLeft, the list and the stats.
+  // Awaited, so the client's next GET is guaranteed to see the new numbers.
+  await cache.invalidate([cacheKeys.event(eventId), cacheKeys.registrations(eventId), cacheKeys.stats()]);
+  return registration;
+}
+
+function saveRegistration(eventId, data) {
+  return inTransaction(async (transaction) => {
     const event = await events.findByIdForUpdate(eventId, transaction);
     if (!event) throw missing(eventId);
     if (await registrations.findByEmail(eventId, data.email, transaction)) {
@@ -39,5 +48,5 @@ export function create(eventId, data) {
     // Log the event id, not the email: logs should not collect personal data.
     logger.info('new registration', { eventId, registrationId: registration.id });
     return registration;
-  }));
+  });
 }

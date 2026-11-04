@@ -9,6 +9,8 @@ if (process.env.NODE_ENV !== 'test') {
 const isTest = process.env.NODE_ENV === 'test';
 const isProduction = process.env.NODE_ENV === 'production';
 const databaseUrl = isTest ? undefined : process.env.DATABASE_URL;
+// Tests always use the in-memory cache, like they always use SQLite.
+const redisUrl = isTest ? '' : process.env.REDIS_URL || '';
 
 export const env = {
   port: process.env.PORT || 3000,
@@ -17,6 +19,10 @@ export const env = {
   isProduction,
   databaseUrl,
   dbStorage: process.env.DB_STORAGE || './data/events.sqlite',
+  // Empty = no Redis: GET responses are cached in this process's memory instead.
+  redisUrl,
+  // Safety net: even if an invalidation is missed, a cached response lives at most this long.
+  cacheTtlSeconds: Number(process.env.CACHE_TTL_SECONDS) || 60,
   // Empty = no RabbitMQ: the outbox relay then sends mails itself.
   amqpUrl: process.env.AMQP_URL || '',
   // Our own exchange, not the shared class exchange: mails contain email addresses.
