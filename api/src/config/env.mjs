@@ -16,5 +16,18 @@ export const env = {
   isTest,
   isProduction,
   databaseUrl,
-  dbStorage: process.env.DB_STORAGE || './data/events.sqlite'
+  dbStorage: process.env.DB_STORAGE || './data/events.sqlite',
+  // Empty = no RabbitMQ: the outbox relay then sends mails itself.
+  amqpUrl: process.env.AMQP_URL || '',
+  // Our own exchange, not the shared class exchange: mails contain email addresses.
+  amqpExchange: process.env.AMQP_EXCHANGE || 'campus-events',
+  outboxIntervalMs: Number(process.env.OUTBOX_INTERVAL_MS) || 3000,
+  mail: {
+    // Empty host = development mode: nodemailer builds the mail and we only log it.
+    host: process.env.SMTP_HOST || '',
+    port: Number(process.env.SMTP_PORT) || 587,
+    user: process.env.SMTP_USER || '',
+    pass: process.env.SMTP_PASS || '',
+    from: process.env.MAIL_FROM || 'Campus Events <no-reply@campus-events.local>'
+  }
 };
