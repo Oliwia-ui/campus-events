@@ -1,3 +1,5 @@
+import { fileURLToPath } from 'node:url';
+
 if (process.env.NODE_ENV !== 'test') {
   try {
     process.loadEnvFile();
@@ -19,6 +21,9 @@ export const env = {
   isProduction,
   databaseUrl,
   dbStorage: process.env.DB_STORAGE || './data/events.sqlite',
+  // The built Vue app. Served by Express when the folder exists (production, `npm run build`);
+  // in development Vite serves it instead. Tests only talk to the API.
+  webDist: isTest ? '' : process.env.WEB_DIST || fileURLToPath(new URL('../../../web/dist', import.meta.url)),
   // Empty = no Redis: GET responses are cached in this process's memory instead.
   redisUrl,
   // Safety net: even if an invalidation is missed, a cached response lives at most this long.
