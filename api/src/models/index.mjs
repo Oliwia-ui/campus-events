@@ -22,6 +22,8 @@ export const OutboxMessage = sequelize.define('OutboxMessage', {
   // null = still to deliver; filled in once delivered.
   processedAt: { type: DataTypes.DATE, allowNull: true },
   attempts: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+  // After a failure, wait until this time before trying again (null = try now).
+  nextAttemptAt: { type: DataTypes.DATE, allowNull: true },
   lastError: { type: DataTypes.STRING(500), allowNull: true }
 });
 

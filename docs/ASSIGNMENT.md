@@ -28,7 +28,8 @@
 
 * **Transactional outbox.** The registration and an `OutboxMessage` row are saved in the same
   transaction. The HTTP response doesn't wait for any mail server.
-* **The relay** (`messaging/outboxRelay.mjs`) delivers pending rows every 3 s. It marks a row as done
+* **The relay** (`messaging/outboxRelay.mjs`) checks for pending rows every 3 s. After a failure it waits
+  twice as long each time (3 s, 6 s, 12 s … max 15 min), so an outage of hours is survived. It marks a row as done
   only after delivery succeeded, so a broken provider means "later", never "lost".
 * **RabbitMQ** (`messaging/rabbit.mjs`). The relay publishes on a confirm channel, so the broker
   confirms it stored the message. The consumer (`messaging/mailConsumer.mjs`) sends with nodemailer
@@ -65,6 +66,10 @@
   | Mail | `SMTP_*` (Ethereal) if set | mail is built and logged, not sent |
 
 * The free Render instance sleeps after 15 minutes; the first visit then takes about a minute.
+* Render's free plan blocks outgoing mail on ports 25, 465 and 587
+  ([Render changelog](https://render.com/changelog/free-web-services-will-no-longer-allow-outbound-traffic-to-smtp-ports)).
+  With Ethereal on port 587 the live log shows exactly the requirement: the registration is saved (201)
+  and the outbox keeps retrying. A provider on port 2525 (Mailtrap, Brevo) gets the mail through.
 
 ## Known limitations
 

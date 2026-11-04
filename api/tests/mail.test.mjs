@@ -24,7 +24,9 @@ describe('Confirmation mail', () => {
     return request(app).post(`/api/events/${created.body.id}/registrations`).send({ name: 'Ada', email: 'ada@example.com' });
   }
 
-  const relayWith = (deliver) => createOutboxRelay({ outbox, deliver, logger: silentLogger, intervalMs: 1000 });
+  // backoffMs 0: these tests retry straight away; the backoff has its own test below.
+  const relayWith = (deliver) =>
+    createOutboxRelay({ outbox, deliver, logger: silentLogger, intervalMs: 1000, backoffMs: () => 0 });
 
   it('stores a mail job in the outbox together with the registration', async () => {
     const res = await registerAda();
@@ -87,7 +89,7 @@ describe('Confirmation mail', () => {
     await registerAda();
     let calls = 0;
     const relay = createOutboxRelay({
-      outbox, logger: silentLogger, intervalMs: 1000, maxAttempts: 2,
+      outbox, logger: silentLogger, intervalMs: 1000, maxAttempts: 2, backoffMs: () => 0,
       deliver: async () => { calls++; throw new Error('rejected'); }
     });
 
@@ -96,6 +98,49 @@ describe('Confirmation mail', () => {
     await relay.runOnce();
 
     assert.equal(calls, 2);
+  });
+});
+
+describe('Outbox retry backoff', () => {
+  beforeEach(async () => {
+    await createTestApp();
+  });
+
+  it('waits longer after every failure instead of retrying every tick', async () => {
+    await outbox.add(REGISTRATION_CREATED, { email: 'ada@example.com' });
+    let clock = new Date('2026-11-04T12:00:00Z');
+    let calls = 0;
+    const relay = createOutboxRelay({
+      outbox, logger: silentLogger, intervalMs: 3000, now: () => clock,
+      deliver: async () => { calls++; throw new Error('offline'); }
+    });
+    const after = async (ms) => { clock = new Date(clock.getTime() + ms); await relay.runOnce(); };
+
+    await relay.runOnce();   // attempt 1 fails → next try in 3 s
+    await after(1000);       // too early: skipped
+    await after(2000);       // 3 s later: attempt 2 fails → next try in 6 s
+    await after(5000);       // too early: skipped
+    await after(1000);       // 6 s later: attempt 3
+
+    assert.equal(calls, 3);
+    const job = await OutboxMessage.findOne();
+    assert.equal(job.attempts, 3);
+    assert.equal(job.nextAttemptAt.getTime() - clock.getTime(), 12_000);
+  });
+
+  it('never waits more than 15 minutes between attempts', async () => {
+    await outbox.add(REGISTRATION_CREATED, { email: 'ada@example.com' });
+    await OutboxMessage.update({ attempts: 30 }, { where: {} });
+    const clock = new Date('2026-11-04T12:00:00Z');
+    const relay = createOutboxRelay({
+      outbox, logger: silentLogger, intervalMs: 3000, now: () => clock,
+      deliver: async () => { throw new Error('offline'); }
+    });
+
+    await relay.runOnce();
+
+    const job = await OutboxMessage.findOne();
+    assert.equal(job.nextAttemptAt.getTime() - clock.getTime(), 15 * 60 * 1000);
   });
 });
 

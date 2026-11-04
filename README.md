@@ -104,7 +104,8 @@ POST /registrations ──► one transaction: Registration + OutboxMessage ─�
 ```
 
 * The registration and the "send this mail" row are saved together or not at all.
-* Mail server or RabbitMQ down: the row stays pending (`attempts`, `lastError`) and is retried.
+* Mail server or RabbitMQ down: the row stays pending (`attempts`, `lastError`) and is retried with
+  exponential backoff (3 s, 6 s, 12 s … at most every 15 min), for about a day.
 * The consumer acks only after the mail is sent; on failure it waits 10 s and requeues.
 * Delivery is at-least-once: in a rare crash a mail can be sent twice, never lost.
 * Without `SMTP_HOST` the mail is built and logged, not sent (development).
@@ -161,6 +162,9 @@ Pages like `/events/1` work after a refresh; `/api/...` is the API.
 | RabbitMQ | [cloudamqp.com](https://www.cloudamqp.com) → free plan | AMQP URL (`amqps://…`) → `AMQP_URL` |
 | Redis | Render → New → **Key Value** (same region as the web service) | Internal URL (`redis://…`) → `REDIS_URL` |
 | Mail | [ethereal.email](https://ethereal.email) → Create Ethereal Account | host, user, password → `SMTP_*` |
+
+> Render's **free** web services block outgoing mail on ports 25, 465 and 587. Use a mail service
+> that also listens on port **2525** (for example Mailtrap or Brevo) and set `SMTP_PORT=2525`.
 
 ### 2. Create the web service
 
