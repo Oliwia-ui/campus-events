@@ -1,7 +1,9 @@
 import { z } from 'zod';
 
 export const idSchema = z.object({
-  id: z.coerce.number().int().positive()
+  id: z.coerce.number({ error: 'The id must be a positive whole number' })
+    .int('The id must be a positive whole number')
+    .positive('The id must be a positive whole number')
 });
 
 // Messages are shown to end users in the frontend, so keep them human.
