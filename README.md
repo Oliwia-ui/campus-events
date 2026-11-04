@@ -83,7 +83,7 @@ then calls `controllers/registrations.mjs` → `services/registrations.mjs` →
 the controller returns the HTTP response. Services do not import Express or Sequelize.
 Only `config/env.mjs` reads environment variables.
 
-`npm run check` passes 53 API tests and 10 frontend tests. The original integration
+`npm run check` passes 55 API tests and 10 frontend tests. The original integration
 tests are unchanged; new behaviour has its own test files.
 
 #### Registrations and capacity
@@ -161,10 +161,10 @@ Pages like `/events/1` work after a refresh; `/api/...` is the API.
 | Postgres | [neon.tech](https://neon.tech) → new project | connection string → `DATABASE_URL` |
 | RabbitMQ | [cloudamqp.com](https://www.cloudamqp.com) → free plan | AMQP URL (`amqps://…`) → `AMQP_URL` |
 | Redis | Render → New → **Key Value** (same region as the web service) | Internal URL (`redis://…`) → `REDIS_URL` |
-| Mail | [ethereal.email](https://ethereal.email) → Create Ethereal Account | host, user, password → `SMTP_*` |
+| Mail | [mailtrap.io](https://mailtrap.io) → Sandboxes → your sandbox → SMTP | username, password → `SMTP_USER`, `SMTP_PASS` |
 
-> Render's **free** web services block outgoing mail on ports 25, 465 and 587. Use a mail service
-> that also listens on port **2525** (for example Mailtrap or Brevo) and set `SMTP_PORT=2525`.
+> Render's **free** web services block outgoing mail on ports 25, 465 and 587, so use port **2525**.
+> Locally, [ethereal.email](https://ethereal.email) on port 587 works too.
 
 ### 2. Create the web service
 
@@ -176,9 +176,9 @@ NODE_ENV=production
 DATABASE_URL=postgresql://...neon.tech/neondb?sslmode=require
 REDIS_URL=redis://red-...:6379
 AMQP_URL=amqps://...cloudamqp.com/...
-SMTP_HOST=smtp.ethereal.email
-SMTP_PORT=587
-SMTP_USER=...@ethereal.email
+SMTP_HOST=sandbox.smtp.mailtrap.io
+SMTP_PORT=2525
+SMTP_USER=...
 SMTP_PASS=...
 MAIL_FROM=Campus Events <no-reply@campus-events.app>
 ```
@@ -193,8 +193,7 @@ mail itself, without `SMTP_HOST` mails are only logged.
 
 * `https://YOUR-SERVICE.onrender.com/` shows the events.
 * Logs show `Redis connected`, `RabbitMQ connected` and `messaging started`.
-* Register for an event: the log shows `mail sent` with a `previewUrl`; open it to see the mail
-  (or log in on ethereal.email → Messages).
+* Register for an event: the log shows `mail sent`, and the mail appears in your Mailtrap sandbox.
 * `curl -i https://YOUR-SERVICE.onrender.com/api/events` twice: the second has `X-Cache: HIT`.
 
 The free web service sleeps after 15 minutes without visitors; the first request then takes about a minute.
