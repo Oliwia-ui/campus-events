@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| GitHub | https://github.com/Oliwia-ui/campus-events (branch `assignment`) |
-| Live | https://YOUR-SERVICE.onrender.com (fill in after deploying) |
+| GitHub | https://github.com/Oliwia-ui/campus-events |
+| Live | https://campus-events-aub6.onrender.com |
 
 ## 1. Clean up and split logic to best practices
 
@@ -55,6 +55,23 @@
   Postgres, the cache in Render Key Value (Redis), the queue in CloudAMQP, and mail goes through
   Ethereal SMTP.
 * Steps are in the README under "Deploy to Render".
+* What runs online right now:
+
+  | Part | Online | Without its setting |
+  |---|---|---|
+  | Cache | Render Key Value (Redis), `REDIS_URL` | in-memory cache |
+  | Database | `DATABASE_URL` (Neon) if set | SQLite, reset when Render restarts |
+  | Queue | `AMQP_URL` (CloudAMQP) if set | the relay sends the mail itself |
+  | Mail | `SMTP_*` (Ethereal) if set | mail is built and logged, not sent |
+
+* The free Render instance sleeps after 15 minutes; the first visit then takes about a minute.
+
+## Known limitations
+
+* **Cache race.** A slow GET that read the database just before a write can store the old
+  response just after the write cleared it. That stale entry lives at most 60 s (the TTL).
+* **Capacity queue.** The in-process queue handles one registration at a time per server.
+  That is plenty here; with many servers the Postgres row lock does the real work.
 
 ## Stack Overflow
 
