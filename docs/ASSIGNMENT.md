@@ -95,7 +95,8 @@ Background reading for the outbox: [microservices.io – Transactional outbox](h
 1. **Capacity.** Run the 10 parallel requests from `capacity.test.mjs`: 3 succeed and 7 get "Event is full".
    On Postgres with two servers and 20 requests on 5 seats, exactly 5 succeed. Without
    `FOR UPDATE` it was 6.
-2. **Mail.** Register on the live site, then open the `previewUrl` from the Render log.
+2. **Mail.** Register on the live site; the Render log shows `mail sent` and the mail appears in the
+   Mailtrap sandbox inbox about a second later.
 3. **Cache.**
    * `curl -i …/api/events/1` twice: MISS, then HIT.
    * Register, then fetch again: MISS, with the new `spotsLeft`.
