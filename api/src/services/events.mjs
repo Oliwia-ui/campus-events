@@ -2,6 +2,7 @@ import * as events from '../repositories/events.mjs';
 import * as registrations from '../repositories/registrations.mjs';
 import { AppError } from '../errors/AppError.mjs';
 import { cache, cacheKeys } from '../cache/index.mjs';
+import { publish, NOTIFICATION_TYPES } from '../notifications/hub.mjs';
 
 export const missing = (id) => new AppError(404, 'NOT_FOUND', `Event with id ${id} not found`);
 
@@ -17,6 +18,7 @@ export async function create(data) {
   const event = await events.create(data);
   // A new event appears in the list and in the stats.
   await cache.invalidate([cacheKeys.eventList(), cacheKeys.stats()]);
+  publish(NOTIFICATION_TYPES.EVENT_CREATED, { eventId: event.id, title: event.title });
   return event;
 }
 

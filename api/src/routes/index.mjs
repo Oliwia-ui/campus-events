@@ -3,6 +3,8 @@ import * as events from '../controllers/events.mjs';
 import * as registrations from '../controllers/registrations.mjs';
 import * as stats from '../controllers/stats.mjs';
 import * as health from '../controllers/health.mjs';
+import * as mcp from '../controllers/mcp.mjs';
+import * as notifications from '../controllers/notifications.mjs';
 import { validate } from '../middleware/validate.mjs';
 import { cached } from '../middleware/cached.mjs';
 import { cacheKeys } from '../cache/index.mjs';
@@ -23,3 +25,8 @@ router.get('/events/:id/registrations', validate(idSchema, 'params'),
   cached((req) => cacheKeys.registrations(eventId(req))), registrations.list);
 router.post('/events/:id/registrations', validate(idSchema, 'params'), validate(registrationSchema, 'body'), registrations.create);
 router.get('/stats', cached(() => cacheKeys.stats()), stats.list);
+// Live updates for every open browser (Server-Sent Events). Never cached: it is a stream.
+router.get('/notifications', notifications.stream);
+// MCP server for AI assistants; the JSON-RPC message is checked in services/mcp.mjs.
+router.post('/mcp', mcp.handle);
+router.get('/mcp', mcp.noStream);

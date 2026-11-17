@@ -83,7 +83,7 @@ then calls `controllers/registrations.mjs` → `services/registrations.mjs` →
 the controller returns the HTTP response. Services do not import Express or Sequelize.
 Only `config/env.mjs` reads environment variables.
 
-`npm run check` passes 55 API tests and 10 frontend tests. The original integration
+`npm run check` passes 69 API tests and 16 frontend tests. The original integration
 tests are unchanged; new behaviour has its own test files.
 
 #### Registrations and capacity
@@ -118,6 +118,22 @@ The `X-Cache` response header shows `HIT` or `MISS`. After every write the servi
 exactly the keys that became outdated (`cache/index.mjs` → `cacheKeys`), so the next GET is fresh.
 Entries also expire after 60 s as a safety net. If Redis is down the API reads from the database.
 
+#### Live notifications (toasts)
+
+`GET /api/notifications` is a Server-Sent Events stream. Every open browser tab keeps one open (`App.vue`)
+and shows a toast when an event is created or someone registers. The services publish to
+`notifications/hub.mjs` right after the database commit, so each registration gives exactly one toast.
+The message only holds the event id and title, never who registered.
+The hub lives in memory: with several API servers each browser only hears its own server.
+
+#### MCP server for AI assistants
+
+`POST /api/mcp` speaks the Model Context Protocol (JSON-RPC 2.0, Streamable HTTP transport) with three tools:
+`list_upcoming_events`, `list_past_events` and `register_for_event` (`eventId`, `name`, `email`).
+A registration through MCP follows the same rules as the REST API (capacity, duplicate email, confirmation mail).
+To connect an AI assistant, add a remote MCP server of type "HTTP" (Streamable HTTP) in its settings
+with this URL: `https://YOUR-SERVICE.onrender.com/api/mcp`
+
 The integration tests in `api/tests/integration` only talk HTTP. They pass before your refactoring,
 and they must still pass after it, without changing them.
 
@@ -128,6 +144,8 @@ and they must still pass after it, without changing them.
 | GET / PATCH / DELETE | `/api/events/:id` | One event (incl. `registered`, `spotsLeft`) |
 | GET / POST | `/api/events/:id/registrations` | List / register `{ name, email }` |
 | GET | `/api/stats` | Occupancy per event |
+| GET | `/api/notifications` | Live updates (Server-Sent Events) |
+| POST | `/api/mcp` | MCP server for AI assistants |
 
 Errors always have this shape: `{ "error": { "code", "message", "details?" } }`.
 

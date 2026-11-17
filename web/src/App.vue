@@ -1,5 +1,21 @@
 <script setup>
+import { onMounted, onUnmounted } from 'vue';
 import { RouterLink, RouterView } from 'vue-router';
+import ToastList from './components/ToastList.vue';
+import { subscribeToNotifications, notificationText } from './api/notifications.js';
+import { useToasts } from './composables/toasts.js';
+
+const { showToast } = useToasts();
+let unsubscribe = () => {};
+
+// App.vue lives as long as the tab, so one stream per open browser tab.
+onMounted(() => {
+  unsubscribe = subscribeToNotifications((notification) => {
+    const text = notificationText(notification);
+    if (text) showToast(text, { link: `/events/${notification.data.eventId}` });
+  });
+});
+onUnmounted(() => unsubscribe());
 </script>
 
 <template>
@@ -14,4 +30,5 @@ import { RouterLink, RouterView } from 'vue-router';
   <main class="page">
     <RouterView />
   </main>
+  <ToastList />
 </template>

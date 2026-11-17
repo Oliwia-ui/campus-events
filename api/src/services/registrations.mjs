@@ -8,6 +8,7 @@ import { createSerialQueue } from '../utils/serialQueue.mjs';
 import { logger } from '../config/logger.mjs';
 import { REGISTRATION_CREATED } from '../messaging/messageTypes.mjs';
 import { cache, cacheKeys } from '../cache/index.mjs';
+import { publish, NOTIFICATION_TYPES } from '../notifications/hub.mjs';
 
 // One registration at a time in this process (see utils/serialQueue.mjs).
 const oneAtATime = createSerialQueue();
@@ -18,10 +19,13 @@ export async function list(eventId) {
 }
 
 export async function create(eventId, data) {
-  const registration = await oneAtATime(() => saveRegistration(eventId, data));
+  const { registration, event } = await oneAtATime(() => saveRegistration(eventId, data));
   // Only after the commit: one more registration changes spotsLeft, the list and the stats.
   // Awaited, so the client's next GET is guaranteed to see the new numbers.
   await cache.invalidate([cacheKeys.event(eventId), cacheKeys.registrations(eventId), cacheKeys.stats()]);
+  // Published here, once, after the commit (not from the outbox, which may deliver twice):
+  // one registration = one toast. No name or email: every open browser receives this.
+  publish(NOTIFICATION_TYPES.REGISTRATION_CREATED, { eventId: event.id, title: event.title });
   return registration;
 }
 
@@ -47,6 +51,6 @@ function saveRegistration(eventId, data) {
     }, transaction);
     // Log the event id, not the email: logs should not collect personal data.
     logger.info('new registration', { eventId, registrationId: registration.id });
-    return registration;
+    return { registration, event };
   });
 }
