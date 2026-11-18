@@ -39,7 +39,8 @@ const tools = {
   },
   register_for_event: {
     description: 'Register one person for an event. Find the eventId with list_upcoming_events first. ' +
-      'Ask the user for the name and email if they did not give them.',
+      'To register several people (for example "me and a friend"), call this once per person. ' +
+      'Ask the user for each name and email they did not give.',
     inputSchema: {
       type: 'object',
       properties: {
